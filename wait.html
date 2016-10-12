@@ -1,0 +1,141 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <title>开始裸聊</title>
+    </head>
+    <body>
+        <div id="queue">等待队列里现在有0人</div>
+        <span onclick="start()" id="startB">加入聊天</span>
+        <div id="tip">请使用chrome/firefox浏览器</div>
+        <video autoplay id="remoteVideo"></video>
+        <video autoplay id="localVideo"></video>
+    </body>
+    <script>
+        var socket = new WebSocket('wss://localhost/queue');
+        var waitNum = 0;
+        var joined = false;
+        var remoteVideoElement = document.getElementById("remoteVideo");
+        var localVideoElement = document.getElementById("localVideo");
+        var getUserMedia, PeerConnection, pc;
+        var isCaller = false;
+
+        if (socket == undefined) {
+            alert('你的浏览器太辣鸡了，我们不支持！');
+        }
+        socket.onopen = function(event) {
+            socket.send('{"type":"ready"}');
+            socket.onmessage = function(event) {
+                var data = JSON.parse(event.data);
+                if (data.type == "update") {
+                    var queue = document.getElementById("queue");
+                    queue.innerHTML = "等待队列里现在有" + data.num + "人";
+                    waitNum = data.num;
+                }
+                if (data.type == "start") {
+                    localStorage.remoteIp = data.remoteIp;
+                    isCaller = true;
+                    prepare();
+                    video();
+                }/*
+                if (data.type == "start2") {
+                    localStorage.remoteIp = data.remoteIp;
+                    isCaller = false;
+                    //setTimeout(function() {video()}, 1000);
+                    video();
+                }*/
+                //如果是一个ICE的候选，则将其加入到PeerConnection中，否则设定对方的session描述为传递过来的描述
+                if( data.type === "__ice_candidate" ){
+                    console.log(data);
+                    var mid = new RTCIceCandidate(data.candidate);
+                    pc.addIceCandidate(mid);
+                }
+                if (data.type == "__offer") {
+                    console.log(data);
+                    var mid = new RTCSessionDescription(data.sdp);
+                    prepare();
+                    pc.setRemoteDescription(mid);
+                    video();
+                }
+                if (data.type == "__answer") {
+                    console.log(data);
+                    var mid = new RTCSessionDescription(data.sdp);
+                    pc.setRemoteDescription(mid);
+                }
+            };
+            socket.onclose = function(event) {
+                console.log('Client notified socket has closed',event);
+            };
+        };
+
+        function start() {
+            if (joined) return;
+            joined = true;
+            var msg = {type: "join"};
+            socket.send(JSON.stringify(msg));
+        }
+
+        function prepare() {
+            getUserMedia = (navigator.getUserMedia ||
+            navigator.webkitGetUserMedia ||
+            navigator.mozGetUserMedia ||
+            navigator.msGetUserMedia);
+            PeerConnection = (window.PeerConnection ||
+            window.webkitPeerConnection00 ||
+            window.webkitRTCPeerConnection ||
+            window.mozRTCPeerConnection);
+
+            pc = new PeerConnection({"iceServers": []});
+            //发送ICE候选到其他客户端
+            pc.onicecandidate = function(event){
+                socket.send(JSON.stringify({
+                    "type": "__ice_candidate",
+                    "candidate": event.candidate
+                }));
+            };
+            //如果检测到媒体流连接到本地，将其绑定到一个video标签上输出
+            pc.onaddstream = function(event){
+                remoteVideoElement.src = URL.createObjectURL(event.stream);
+            };
+
+            document.getElementById("startB").innerHTML = "";
+            document.getElementById("tip").innerHTML = "";
+            document.getElementById("queue").innerHTML = "";
+        }
+
+        function video() {
+            //获取本地的媒体流，并绑定到一个video标签上输出，并且发送这个媒体流给其他客户端
+            getUserMedia.call(navigator, {
+                "audio": true,
+                "video": true
+            }, function(stream){
+                //绑定本地媒体流到video标签用于输出
+                localVideoElement.src = URL.createObjectURL(stream);
+                //向PeerConnection中加入需要发送的流
+                pc.addStream(stream);
+                //如果是发送方则发送一个offer信令，否则发送一个answer信令
+                if(isCaller){
+                    pc.createOffer().then(function(offer) {
+                        return pc.setLocalDescription(offer);
+                    }).then(function() {
+                        socket.send(JSON.stringify({
+                            "type": "__offer",
+                            "sdp": pc.localDescription
+                        }));
+                    });
+                } else {
+                    pc.createAnswer().then(function(answer) {
+                        return pc.setLocalDescription(answer);
+                    }).then(function() {
+                        socket.send(JSON.stringify({
+                            "type": "__answer",
+                            "sdp": pc.localDescription
+                        }));
+                    });
+                }
+            }, function(error){
+                //处理媒体流创建失败错误
+            });
+
+        }
+    </script>
+</html>
