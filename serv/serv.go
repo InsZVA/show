@@ -105,11 +105,7 @@ func HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 		switch msg {
 		case "connect":
 			reply["msg"] = "ok"
-			err = p.Push(reply)
-			if err != nil {
-				log.Println(err)
-			}
-			PushPairingNum(p)
+			p.Push(reply)
 		case "pair":
 			if p.Status != p2p.P2P_POINT_READY {
 				reply["msg"] = "error"
