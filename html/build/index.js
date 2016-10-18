@@ -29459,6 +29459,7 @@
 	        return {
 	            state: 'ready',
 	            online_num: 0,
+	            pairing_num: 0,
 	            role: 'none',
 	            remote_video_src: '',
 	            local_video_src: ''
@@ -29470,7 +29471,7 @@
 	    getUserMedia: {},
 	    componentDidMount: function componentDidMount() {
 	        var pthis = this;
-	        this.ws = new WebSocket("wss://localhost/serv");
+	        this.ws = new WebSocket("wss://10.180.27.135/serv");
 	        this.ws.onmessage = function (event) {
 	            var msg = JSON.parse(event.data);
 	            switch (msg.msg) {
@@ -29480,7 +29481,7 @@
 	                case 'ok':
 	                    break;
 	                case 'update':
-	                    pthis.setState({ online_num: msg.online_num });
+	                    pthis.setState({ online_num: msg.online_num, pairing_num: msg.pairing_num });
 	                    break;
 	                case 'paired':
 	                    pthis.setState({ state: 'paired', role: msg.role });
@@ -29563,6 +29564,38 @@
 	        this.setState({ state: 'ready' });
 	    },
 	    render: function render() {
+	        var tip = "";
+	        if (this.state.state == "pairing") {
+	            tip = _react2.default.createElement(
+	                'div',
+	                null,
+	                '\u5F53\u524D\u5728\u7EBF\u4EBA\u6570 ',
+	                this.state.online_num,
+	                '  ',
+	                _react2.default.createElement('br', null),
+	                '\u6B63\u5728\u5339\u914D\u4EBA\u6570\uFF1A',
+	                this.state.pairing_num,
+	                ' ',
+	                _react2.default.createElement('br', null),
+	                _react2.default.createElement(_LinearProgress2.default, { mode: 'indeterminate' }),
+	                '\u6B63\u5728\u5339\u914D\u3002\u3002\u3002'
+	            );
+	        } else {
+	            tip = _react2.default.createElement(
+	                'div',
+	                null,
+	                '\u5F53\u524D\u5728\u7EBF\u4EBA\u6570 ',
+	                this.state.online_num,
+	                '  ',
+	                _react2.default.createElement('br', null),
+	                '\u6B63\u5728\u5339\u914D\u4EBA\u6570\uFF1A',
+	                this.state.pairing_num,
+	                ' ',
+	                _react2.default.createElement('br', null),
+	                '\u9884\u8BA1\u5339\u914D\u65F6\u95F4(\u5206\u949F)\uFF1A',
+	                this.state.pairing_num < 2 ? 100 : this.state.pairing_num * 10 / this.state.online_num
+	            );
+	        }
 	        if (this.state.state == 'pairing' || this.state.state == 'ready') return _react2.default.createElement(
 	            'div',
 	            null,
@@ -29583,17 +29616,12 @@
 	                    {
 	                        overlay: _react2.default.createElement(_Card.CardTitle, { title: '\u6FC0\u60C5\u804A\u5929\u5BA4', subtitle: '\u514D\u8D39\u968F\u673A\u914D\u5BF9\u804A\u5929' })
 	                    },
-	                    _react2.default.createElement('img', { src: 'http://i0.sinaimg.cn/gm/2014/0801/U7233P115DT20140801133337.jpg' })
+	                    _react2.default.createElement('img', { src: 'http://www.52tq.net/uploads/allimg/161002/0315292K0-45.jpg' })
 	                ),
 	                _react2.default.createElement(
 	                    _Card.CardText,
 	                    null,
-	                    '\u5F53\u524D\u5728\u7EBF\u4EBA\u6570\uFF1A',
-	                    this.state.online_num,
-	                    ' ',
-	                    _react2.default.createElement('br', null),
-	                    this.state.state == "pairing" ? _react2.default.createElement(_LinearProgress2.default, { mode: 'indeterminate' }) : "预计匹配时间： 1分钟",
-	                    this.state.state == "pairing" ? "正在匹配。。。" : ""
+	                    tip
 	                ),
 	                _react2.default.createElement(
 	                    _Card.CardActions,

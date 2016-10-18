@@ -88,7 +88,6 @@ func HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 		}
 		p.Push(reply)
 	})
-	BroadCast()
 	var data map[string]interface{}
 	for p.Status != p2p.P2P_POINT_CLOSE {
 		data, err = p.Pull()
@@ -119,6 +118,7 @@ func HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 			p.Push(reply)
 		case "stop_pair":
 			if p.Status == p2p.P2P_POINT_PAIRING {
+				atomic.AddInt32(&p2p.Pairing_num, -1)
 				p.Status = p2p.P2P_POINT_READY
 				if p.Pair != nil { // Unexpectly paired
 					p.Pair.Status = p2p.P2P_POINT_READY
@@ -150,15 +150,9 @@ func HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 				p.Pair.Push(data)
 			}
 		}
+		BroadCast()
 	}
 
-}
-
-func PushPairingNum(p *p2p.Point) {
-	reply := make(map[string]interface{})
-	reply["msg"] = "update"
-	reply["online_num"] = p2p.Points.Len()
-	p.Push(reply)
 }
 
 func BroadCast() {

@@ -4,7 +4,7 @@ import (
 	"container/list"
 	"log"
 	"sync/atomic"
-	"time"
+	//"time"
 )
 
 var (
@@ -99,13 +99,38 @@ func Manager() {
 		default:
 		}
 
+		Laji := make([]*list.Element, 0)
+		if msg != nil {
+			for l := Points.Front(); l != nil; l = l.Next() {
+				p := l.Value.(*Point)
+				if p.Status != P2P_POINT_CLOSE {
+					p.Push(msg)
+				} else {
+					Laji = append(Laji, l)
+				}
+			}
+			for _, l := range Laji {
+				var p *Point
+				if l.Prev() != nil {
+					p = l.Prev().Value.(*Point)
+				} else {
+					p = l.Value.(*Point)
+				}
+				select {
+				case p.Chan <- true:
+					log.Println("Clean Laji")
+					Points.Remove(l)
+					<-p.Chan
+				default:
+				}
+
+			}
+		}
+
 		var p0 *Point
 		l := Points.Front()
 		for ; l != nil && (p0 == nil || p0.Status == P2P_POINT_PAIRING); l = l.Next() {
 			p := l.Value.(*Point)
-			if msg != nil {
-				p.Push(msg)
-			}
 			select {
 			case p.ListChan <- true:
 				<-p.ListChan
@@ -113,7 +138,7 @@ func Manager() {
 				if p0 != nil {
 					<-p0.Chan
 				}
-				break
+				goto bbreak
 			}
 			if p.Status == P2P_POINT_PAIRING {
 				if p0 == nil {
@@ -135,7 +160,7 @@ func Manager() {
 						<-p0.Chan
 						<-p.Chan
 						p0 = nil
-						break
+						goto bbreak
 					}
 					if p.Status != P2P_POINT_PAIRING {
 						<-p.Chan
@@ -150,7 +175,7 @@ func Manager() {
 					<-p0.Chan
 					go p0.OnPair(p0, p)
 					go p.OnPair(p, p0)
-					break
+					goto bbreak
 				default:
 					continue
 				}
@@ -159,6 +184,8 @@ func Manager() {
 		if p0 != nil {
 			<-p0.Chan
 		}
-		time.Sleep(1 * time.Millisecond)
+
+	bbreak:
+		//time.Sleep(1 * time.Millisecond)
 	}
 }
