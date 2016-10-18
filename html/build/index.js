@@ -29470,7 +29470,7 @@
 	    getUserMedia: {},
 	    componentDidMount: function componentDidMount() {
 	        var pthis = this;
-	        this.ws = new WebSocket("wss://10.180.27.135/");
+	        this.ws = new WebSocket("wss://localhost/serv");
 	        this.ws.onmessage = function (event) {
 	            var msg = JSON.parse(event.data);
 	            switch (msg.msg) {
