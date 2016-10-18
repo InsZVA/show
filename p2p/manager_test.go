@@ -1,25 +1,26 @@
 package p2p
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 )
 
-func TestRandomPair(t *testing.T) {
-	var p [100]*Point
-	for i := 0; i < 100; i++ {
-		p[i] = NewPoint(nil)
-	}
+func TestManager(t *testing.T) {
+	go Manager()
+	var p [20]*Point
 	wp := sync.WaitGroup{}
-	f := func(pt *Point) {
-		defer wp.Done()
-		pt.RandomPair()
-	}
-	for i := 0; i < 100; i++ {
-		go f(p[i])
+	for i := 0; i < 20; i++ {
+		p[i] = NewPoint(nil, func(self, pair *Point) {
+			fmt.Println(self, pair)
+			wp.Done()
+		})
+		p[i].RandomPair()
 		wp.Add(1)
 	}
+	for i := 0; i < 20; i++ {
 
+	}
 	wp.Wait()
 
 }

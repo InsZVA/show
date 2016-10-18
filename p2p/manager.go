@@ -1,20 +1,35 @@
 package p2p
 
 import (
-	"sync"
+	"container/list"
+	"log"
+	"sync/atomic"
 	"time"
 )
 
 var (
-	// autoIcreament gives each point a unique id
-	autoIcreament = 0
 	// Points saves all points
-	Points = make(map[int]*Point)
-	// Mutex to protect map
-	PointsMutex = sync.RWMutex{}
+	Points = list.New()
+	// Atomic integer to control manager number
+	Pairing_num int32
+	Manager_num int32
+	//Message to broadcast
+	BroadCastMessage = make(chan map[string]interface{}, 1)
 )
 
 func (p *Point) RandomPair() {
+	p.Status = P2P_POINT_PAIRING
+	atomic.AddInt32(&Pairing_num, 1)
+}
+
+func init() {
+	go Manager()
+}
+
+// Duplicated because of starve problem
+/*
+func (p *Point) RandomPair() {
+	panic("RandomPair() function has been duplicated")
 	PointsMutex.RLock()
 	defer PointsMutex.RUnlock()
 	p.Status = P2P_POINT_PAIRING
@@ -60,68 +75,90 @@ func (p *Point) RandomPair() {
 		}
 	}
 
-}
+}*/
 
-/*
-func (p *Point) RandomPairUsingTryLock() {
-	PointsMutex.RLock()
-	defer PointsMutex.RUnlock()
-	p.Status = P2P_POINT_PAIRING
-	for p.Status == P2P_POINT_PAIRING {
-		for _, pt := range Points {
-			if p == pt {
-				continue
+func Manager() {
+	atomic.AddInt32(&Manager_num, 1)
+	log.Println("Manager Start")
+	defer log.Println("Manager die")
+	for atomic.LoadInt32(&Pairing_num) > 1 || atomic.LoadInt32((&Manager_num)) == 1 {
+
+		//Manager number control
+		if atomic.LoadInt32(&Pairing_num) > 50 {
+			go Manager()
+		}
+		if atomic.LoadInt32(&Pairing_num)/atomic.LoadInt32(&Manager_num) < 20 && atomic.LoadInt32(&Manager_num) > 1 {
+			atomic.AddInt32(&Manager_num, -1)
+			return
+		}
+
+		//Pick broadcast message
+		var msg map[string]interface{}
+		select {
+		case msg = <-BroadCastMessage:
+		default:
+		}
+
+		var p0 *Point
+		l := Points.Front()
+		for ; l != nil && (p0 == nil || p0.Status == P2P_POINT_PAIRING); l = l.Next() {
+			p := l.Value.(*Point)
+			if msg != nil {
+				p.Push(msg)
 			}
-			if pt.Status != P2P_POINT_PAIRING {
-				continue
-			}
-			if pt.Mutex.TryLock() {
-				if pt.Status != P2P_POINT_PAIRING {
-					pt.Mutex.Unlock()
-					continue
+			select {
+			case p.ListChan <- true:
+				<-p.ListChan
+			default:
+				if p0 != nil {
+					<-p0.Chan
 				}
-				if p.Mutex.TryLock() {
-					if p.Status != P2P_POINT_PAIRING {
-						p.Mutex.Unlock()
-						pt.Mutex.Unlock()
-						return
+				break
+			}
+			if p.Status == P2P_POINT_PAIRING {
+				if p0 == nil {
+					select {
+					case p.Chan <- true:
+						if p.Status != P2P_POINT_PAIRING {
+							<-p.Chan
+							continue
+						}
+						p0 = p
+						continue
+					default:
+						continue
 					}
-					p.Pair = pt
-					pt.Pair = p
-					p.Status = P2P_POINT_OFFER
-					pt.Status = P2P_POINT_ANSWER
-					p.Mutex.Unlock()
-					pt.Mutex.Unlock()
-				} else {
-					pt.Mutex.Unlock()
-					//time.Sleep(10 * time.Millisecond)
+				}
+				select {
+				case p.Chan <- true:
+					if p0.Status != P2P_POINT_PAIRING {
+						<-p0.Chan
+						<-p.Chan
+						p0 = nil
+						break
+					}
+					if p.Status != P2P_POINT_PAIRING {
+						<-p.Chan
+						continue
+					}
+					p0.Status = P2P_POINT_OFFER
+					p.Status = P2P_POINT_ANSWER
+					p0.Pair = p
+					p.Pair = p0
+					atomic.AddInt32(&Pairing_num, -2)
+					<-p.Chan
+					<-p0.Chan
+					go p0.OnPair(p0, p)
+					go p.OnPair(p, p0)
+					break
+				default:
 					continue
 				}
-			} else {
-				//time.Sleep(10 * time.Millisecond)
-				continue
 			}
 		}
-	}
-
-}
-*/
-
-func GC() {
-	PointsMutex.RLock()
-	length := len(Points)
-	PointsMutex.RUnlock()
-	if length%100 == 50 {
-		for i := 0; i < length/2; i++ {
-			for k, p := range Points {
-				if p.Status == P2P_POINT_CLOSE {
-					PointsMutex.Lock()
-					delete(Points, k)
-					PointsMutex.Unlock()
-					break
-				}
-			}
+		if p0 != nil {
+			<-p0.Chan
 		}
-
+		time.Sleep(1 * time.Millisecond)
 	}
 }

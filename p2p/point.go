@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log"
 	"sync"
-	//"sync"
 
 	"github.com/gorilla/websocket"
 )
@@ -29,12 +28,13 @@ var (
 
 // Point struct stands for a specified client
 type Point struct {
-	ID     int
-	Conn   *websocket.Conn
-	Mutex  sync.Mutex // Protect websocket conn
-	Status int
-	Pair   *Point
-	Chan   chan bool // When pairing, Chan is needed to avoid conflicts
+	Conn     *websocket.Conn
+	Mutex    sync.Mutex // Protect websocket conn
+	Status   int
+	Pair     *Point
+	Chan     chan bool               // When pairing, Chan is needed to avoid conflicts
+	ListChan chan bool               // Protect the list when mapping When a chain was locked, its value cannot be read
+	OnPair   func(self, pair *Point) //Event handler when pair is ok
 }
 
 // Push data to client, if client is going away, the status will be P2P_POINT_CLOSE.
@@ -65,21 +65,26 @@ func (p *Point) Pull() (map[string]interface{}, error) {
 }
 
 // Create a new point with a special websocket connection.
-func NewPoint(conn *websocket.Conn) (p *Point) {
-	GC()
+func NewPoint(conn *websocket.Conn, onpair func(self, pair *Point)) (p *Point) {
 	p = &Point{
-		ID:     autoIcreament,
-		Conn:   conn,
-		Status: P2P_POINT_READY,
-		Chan:   make(chan bool, 1),
+		Conn:     conn,
+		Status:   P2P_POINT_READY,
+		Chan:     make(chan bool, 1),
+		ListChan: make(chan bool, 1),
+		OnPair:   onpair,
 	}
-	autoIcreament++
-	PointsMutex.Lock()
-	Points[p.ID] = p
-	PointsMutex.Unlock()
+	b := Points.Back()
+	if b != nil {
+		b.Value.(*Point).ListChan <- true
+		Points.PushBack(p)
+		<-b.Value.(*Point).ListChan
+	} else {
+		Points.PushBack(p)
+	}
+
 	if conn == nil {
 		return
 	}
-	log.Println(conn.RemoteAddr().String(), "connected to server, Point ID:", p.ID)
+	log.Println(conn.RemoteAddr().String(), "connected to server")
 	return
 }
