@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"sync"
+	"sync/atomic"
 
 	"github.com/gorilla/websocket"
 )
@@ -46,6 +47,9 @@ func (p *Point) Push(data map[string]interface{}) error {
 	err := p.Conn.WriteJSON(data)
 	p.Mutex.Unlock()
 	if websocket.IsCloseError(err, WS_CLOSE_ERROR_CODES...) {
+		if p.Status == P2P_POINT_PAIRING {
+			atomic.AddInt32(&Pairing_num, -1)
+		}
 		p.Status = P2P_POINT_CLOSE
 	}
 	return err
@@ -59,6 +63,9 @@ func (p *Point) Pull() (map[string]interface{}, error) {
 	}
 	err := p.Conn.ReadJSON(&data)
 	if websocket.IsCloseError(err, WS_CLOSE_ERROR_CODES...) {
+		if p.Status == P2P_POINT_PAIRING {
+			atomic.AddInt32(&Pairing_num, -1)
+		}
 		p.Status = P2P_POINT_CLOSE
 	}
 	return data, err
